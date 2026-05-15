@@ -18,6 +18,8 @@ from aws_agent import AWSAgent
 from training_agent import TrainingAgent
 from notification_agent import NotificationAgent
 from model_router import ModelRouter
+from agent_memory import agent_memory
+from agent_prompts import build_prompt
 
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger("synapse.main")
@@ -88,9 +90,16 @@ async def handle_command(sid, data):
     if not query:
         return
 
+    session_id = sid
+    agent_memory.add(session_id, role="user", content=query)
+    session_context = agent_memory.get_context(session_id)
+
+    system_prompt = build_prompt(session_context=session_context)
+    agent = create_react_agent(llm, tools, state_modifier=system_prompt)
+
     full_response = []
     try:
-        async for event in agent_executor.astream_events(
+        async for event in agent.astream_events(
             {"messages": [{"role": "user", "content": query}]},
             version="v2",
         ):
@@ -110,17 +119,25 @@ async def handle_command(sid, data):
                 }, to=sid)
 
             elif kind == "on_tool_end":
+                tool_name = event["name"]
+                tool_output = str(event["data"].get("output", ""))
+                agent_memory.add(
+                    session_id, role="tool", content=tool_output,
+                    tool_name=tool_name, tool_result_summary=tool_output[:150],
+                )
                 await sio.emit("tool_call", {
-                    "tool": event["name"],
+                    "tool": tool_name,
                     "status": "done",
-                    "output": str(event["data"].get("output", ""))[:200],
+                    "output": tool_output[:200],
                 }, to=sid)
 
-        await sio.emit("command_output", {"data": "".join(full_response)}, to=sid)
+        final = "".join(full_response)
+        agent_memory.add(session_id, role="agent", content=final[:300])
+        await sio.emit("command_output", {"data": final}, to=sid)
 
     except Exception as e:
         error_msg = str(e)
-        logger.error(f"Agent error for sid={sid}: {error_msg}")
+        logger.error(f"Agent error sid={sid}: {error_msg}")
         if any(w in error_msg.lower() for w in ["429", "rate limit", "quota"]):
             await sio.emit("command_output", {
                 "data": f"Provider {router.current_provider} hit rate limit. Please retry."
