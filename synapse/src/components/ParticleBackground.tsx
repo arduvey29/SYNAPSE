@@ -37,7 +37,7 @@ export const ParticleBackground: React.FC = () => {
       ctx.fillStyle = 'rgba(2, 4, 24, 0.05)';
       ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-      ctx.fillStyle = 'rgba(0, 255, 255, 0.3)';; // Cyan color for the characters
+      ctx.fillStyle = 'rgba(0, 255, 255, 0.21)';; // Cyan color for the characters (toned down ~30%)
       ctx.font = `${fontSize}px monospace`;
 
       for (let i = 0; i < rainDrops.length; i++) {
