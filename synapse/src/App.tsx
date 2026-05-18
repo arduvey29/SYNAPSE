@@ -35,6 +35,20 @@ const parsePlanCounts = (text: string): { doneSteps: number; totalSteps: number 
   return { doneSteps: Number(m[1]), totalSteps: Number(m[2]) };
 };
 
+const buildStepMessage = (
+  step: Plan['steps'][number],
+  requestId: string,
+): AgentStepMessage => ({
+  kind: 'agent-step',
+  id: `step-${requestId}-${step.step_id}`,
+  requestId,
+  stepId: step.step_id,
+  description: step.description,
+  intendedTool: step.intended_tool,
+  status: 'pending',
+  logs: [],
+});
+
 function App() {
   const [showEntryScreen, setShowEntryScreen] = useState(true);
   const [isConnected, setIsConnected] = useState(socket.connected);
@@ -120,10 +134,10 @@ function App() {
     const onToken = (data: { data: string; scope?: string } & RequestEvent) => {
       if (!isCurrentRequest(data) || data.scope === 'step' || !data.data) return;
       setIsTyping(false);
+      const requestId = data.request_id ?? activeRequestIdRef.current ?? 'stream';
+      const streamMessageId = streamMessageIdRef.current ?? `stream-${requestId}`;
+      streamMessageIdRef.current = streamMessageId;
       setMessages((prev) => {
-        const requestId = data.request_id ?? activeRequestIdRef.current ?? 'stream';
-        const streamMessageId = streamMessageIdRef.current ?? `stream-${requestId}`;
-        streamMessageIdRef.current = streamMessageId;
         if (!prev.some((msg) => msg.kind === 'agent-text' && msg.id === streamMessageId)) {
           const newMsg: AgentTextMessage = {
             kind: 'agent-text',
@@ -172,32 +186,14 @@ function App() {
           );
           const newSteps: AgentStepMessage[] = data.plan.steps
             .filter((s) => !existingIds.has(s.step_id))
-            .map((s) => ({
-              kind: 'agent-step',
-              id: `step-${requestId}-${s.step_id}`,
-              requestId,
-              stepId: s.step_id,
-              description: s.description,
-              intendedTool: s.intended_tool,
-              status: 'pending',
-              logs: [],
-            }));
+            .map((s) => buildStepMessage(s, requestId));
           return [...kept, ...newSteps];
         });
       } else {
         setStepStatuses({});
         // Initial plan: append one agent-step per plan step.
         setMessages((prev) => {
-          const newSteps: AgentStepMessage[] = data.plan.steps.map((s) => ({
-            kind: 'agent-step',
-            id: `step-${requestId}-${s.step_id}`,
-            requestId,
-            stepId: s.step_id,
-            description: s.description,
-            intendedTool: s.intended_tool,
-            status: 'pending',
-            logs: [],
-          }));
+          const newSteps: AgentStepMessage[] = data.plan.steps.map((s) => buildStepMessage(s, requestId));
           return [...prev, ...newSteps];
         });
       }
