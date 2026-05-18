@@ -1,13 +1,12 @@
 import React, { useEffect, useRef } from 'react';
 import { TypingIndicator } from './TypingIndicator';
-import { ScrambledText } from './ScrambledText';
+import { UserBubble } from './UserBubble';
+import { TextBubble } from './TextBubble';
+import { StepBubble } from './StepBubble';
+import { SummaryBubble } from './SummaryBubble';
+import type { Message } from '../types/messages';
 
-export interface Message {
-  id?: string;
-  user: 'You' | 'SYNAPSE';
-  text: string;
-  streaming?: boolean;
-}
+export type { Message };
 
 interface ChatDisplayProps {
   messages: Message[];
@@ -23,29 +22,14 @@ export const ChatDisplay: React.FC<ChatDisplayProps> = ({ messages, isTyping }) 
 
   return (
     <div className="flex-1 p-4 overflow-y-auto">
-      {messages.map((msg, index) => (
-        <div key={msg.id ?? index} className={`mb-4 flex ${msg.user === 'You' ? 'justify-end' : 'justify-start'}`}>
-          <div className="max-w-prose">
-            <p className={`text-sm mb-1 ${msg.user === 'You' ? 'text-right' : 'text-left'} text-gray-400`}>
-              {msg.user}
-            </p>
-            <div
-              className={`inline-block p-4 rounded-xl shadow-lg
-                ${msg.user === 'You'
-                  ? 'bg-blue-600/60 border border-blue-500/70'
-                  : 'bg-gray-800/70 border border-gray-500/60'
-                }`}
-              style={{ backdropFilter: 'blur(10px)', WebkitBackdropFilter: 'blur(10px)' }}
-            >
-              {msg.user === 'SYNAPSE' ? (
-                <ScrambledText text={msg.text} />
-              ) : (
-                <p className="font-sans text-left text-white">{msg.text}</p>
-              )}
-            </div>
-          </div>
-        </div>
-      ))}
+      {messages.map((msg) => {
+        switch (msg.kind) {
+          case 'user':          return <UserBubble    key={msg.id} msg={msg} />;
+          case 'agent-text':    return <TextBubble    key={msg.id} msg={msg} />;
+          case 'agent-step':    return <StepBubble    key={msg.id} msg={msg} />;
+          case 'agent-summary': return <SummaryBubble key={msg.id} msg={msg} />;
+        }
+      })}
       {isTyping && (
         <div className="mb-4">
           <div
