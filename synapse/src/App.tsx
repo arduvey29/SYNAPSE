@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { socket } from './socket';
 import { ChatDisplay } from './components/ChatDisplay';
 import type { Message } from './components/ChatDisplay';
@@ -10,6 +10,14 @@ import { PlanPanel, type Plan } from './components/PlanPanel';
 import type { StepStatus } from './components/StepStatusIcon';
 
 type StepStateMap = Record<number, { status: StepStatus; message?: string }>;
+type RequestEvent = { request_id?: string };
+
+const createRequestId = () => {
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+    return crypto.randomUUID();
+  }
+  return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+};
 
 function App() {
   const [showEntryScreen, setShowEntryScreen] = useState(true);
@@ -18,24 +26,79 @@ function App() {
   const [isTyping, setIsTyping] = useState(false);
   const [plan, setPlan] = useState<Plan | null>(null);
   const [stepStatuses, setStepStatuses] = useState<StepStateMap>({});
+  const activeRequestIdRef = useRef<string | null>(null);
+  const streamMessageIdRef = useRef<string | null>(null);
 
   const handleSendMessage = (message: string) => {
     if (message.trim() === '') return;
-    socket.emit('execute_natural_command', { command: message });
-    setMessages((prev) => [...prev, { text: message, user: 'You' }]);
+    const requestId = createRequestId();
+    activeRequestIdRef.current = requestId;
+    streamMessageIdRef.current = null;
+    socket.emit('execute_natural_command', { command: message, request_id: requestId });
+    setMessages((prev) => [
+      ...prev,
+      { id: `user-${requestId}`, text: message, user: 'You' },
+    ]);
     setIsTyping(true);
     setPlan(null);
     setStepStatuses({});
   };
 
   useEffect(() => {
+    const isCurrentRequest = (data: RequestEvent) => (
+      !data.request_id || data.request_id === activeRequestIdRef.current
+    );
     const onConnect = () => setIsConnected(true);
     const onDisconnect = () => setIsConnected(false);
-    const onCommandOutput = (data: { data: string }) => {
+    const onCommandOutput = (data: { data: string } & RequestEvent) => {
+      if (!isCurrentRequest(data)) return;
       setIsTyping(false);
-      setMessages((prev) => [...prev, { text: data.data, user: 'SYNAPSE' }]);
+      const streamMessageId = streamMessageIdRef.current;
+      setMessages((prev) => {
+        if (!streamMessageId) {
+          return [
+            ...prev,
+            {
+              id: `assistant-${data.request_id ?? Date.now()}`,
+              text: data.data,
+              user: 'SYNAPSE',
+            },
+          ];
+        }
+        return prev.map((msg) => (
+          msg.id === streamMessageId
+            ? { ...msg, text: data.data, streaming: false }
+            : msg
+        ));
+      });
+      streamMessageIdRef.current = null;
+      activeRequestIdRef.current = null;
     };
-    const onPlanGenerated = (data: { plan: Plan; replanned?: boolean }) => {
+    const onToken = (data: { data: string; scope?: string } & RequestEvent) => {
+      if (!isCurrentRequest(data) || data.scope === 'step' || !data.data) return;
+      setIsTyping(false);
+      setMessages((prev) => {
+        const requestId = data.request_id ?? activeRequestIdRef.current ?? 'stream';
+        const streamMessageId = streamMessageIdRef.current ?? `stream-${requestId}`;
+        streamMessageIdRef.current = streamMessageId;
+        if (!prev.some((msg) => msg.id === streamMessageId)) {
+          return [
+            ...prev,
+            {
+              id: streamMessageId,
+              text: data.data,
+              user: 'SYNAPSE',
+              streaming: true,
+            },
+          ];
+        }
+        return prev.map((msg) => (
+          msg.id === streamMessageId ? { ...msg, text: msg.text + data.data } : msg
+        ));
+      });
+    };
+    const onPlanGenerated = (data: { plan: Plan; replanned?: boolean } & RequestEvent) => {
+      if (!isCurrentRequest(data)) return;
       setPlan(data.plan);
       if (data.replanned) {
         // Keep only statuses for step IDs that exist in the new plan.
@@ -56,7 +119,8 @@ function App() {
       step_id: number;
       status: StepStatus;
       message?: string;
-    }) => {
+    } & RequestEvent) => {
+      if (!isCurrentRequest(data)) return;
       setStepStatuses((prev) => ({
         ...prev,
         [data.step_id]: { status: data.status, message: data.message },
@@ -66,6 +130,7 @@ function App() {
     socket.on('connect', onConnect);
     socket.on('disconnect', onDisconnect);
     socket.on('command_output', onCommandOutput);
+    socket.on('token', onToken);
     socket.on('plan_generated', onPlanGenerated);
     socket.on('step_status', onStepStatus);
 
@@ -73,6 +138,7 @@ function App() {
       socket.off('connect', onConnect);
       socket.off('disconnect', onDisconnect);
       socket.off('command_output', onCommandOutput);
+      socket.off('token', onToken);
       socket.off('plan_generated', onPlanGenerated);
       socket.off('step_status', onStepStatus);
     };

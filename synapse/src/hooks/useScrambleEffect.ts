@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 
 export const useScrambleEffect = (finalText: string) => {
   const [displayedText, setDisplayedText] = useState('');
@@ -7,10 +7,12 @@ export const useScrambleEffect = (finalText: string) => {
   useEffect(() => {
     let frameId: number;
     let frame = 0;
+    // Scale delay so total animation stays under ~1.5 seconds regardless of message length
+    const delay = Math.max(0.1, Math.min(2, 60 / Math.max(finalText.length, 1)));
     const queue = finalText.split('').map((char, i) => ({
         to: char,
-        start: i * 3, // Slower start for each character
-        end: (i * 3) + 10, // Longer scramble duration
+        start: Math.floor(i * delay),
+        end: Math.floor(i * delay) + 6,
     }));
 
     const update = () => {

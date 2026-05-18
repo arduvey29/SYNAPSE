@@ -3,8 +3,10 @@ import { TypingIndicator } from './TypingIndicator';
 import { ScrambledText } from './ScrambledText';
 
 export interface Message {
-  user: 'You' | 'Agent';
+  id?: string;
+  user: 'You' | 'SYNAPSE';
   text: string;
+  streaming?: boolean;
 }
 
 interface ChatDisplayProps {
@@ -22,7 +24,7 @@ export const ChatDisplay: React.FC<ChatDisplayProps> = ({ messages, isTyping }) 
   return (
     <div className="flex-1 p-4 overflow-y-auto">
       {messages.map((msg, index) => (
-        <div key={index} className={`mb-4 flex ${msg.user === 'You' ? 'justify-end' : 'justify-start'}`}>
+        <div key={msg.id ?? index} className={`mb-4 flex ${msg.user === 'You' ? 'justify-end' : 'justify-start'}`}>
           <div className="max-w-prose">
             <p className={`text-sm mb-1 ${msg.user === 'You' ? 'text-right' : 'text-left'} text-gray-400`}>
               {msg.user}
@@ -30,16 +32,15 @@ export const ChatDisplay: React.FC<ChatDisplayProps> = ({ messages, isTyping }) 
             <div
               className={`inline-block p-4 rounded-xl shadow-lg
                 ${msg.user === 'You'
-                  ? 'bg-blue-600/30 border border-blue-500/50'
-                  : 'bg-gray-700/30 border border-gray-500/50'
+                  ? 'bg-blue-600/60 border border-blue-500/70'
+                  : 'bg-gray-800/70 border border-gray-500/60'
                 }`}
               style={{ backdropFilter: 'blur(10px)', WebkitBackdropFilter: 'blur(10px)' }}
             >
-              {msg.user === 'Agent' ? (
+              {msg.user === 'SYNAPSE' ? (
                 <ScrambledText text={msg.text} />
               ) : (
-                // This is the line that has been changed
-                <p className="font-orbitron text-left text-gray-100">{msg.text}</p>
+                <p className="font-sans text-left text-white">{msg.text}</p>
               )}
             </div>
           </div>

@@ -33,6 +33,12 @@ backend.log
 synapse/node_modules/
 synapse/dist/
 
+# AI-generated workspace artifacts and docs
+.superpowers/
+docs/superpowers/
+TECH_SPEC_SYNAPSE.md
+
+
 # OS files
 .DS_Store
 Thumbs.db
