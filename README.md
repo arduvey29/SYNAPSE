@@ -341,5 +341,6 @@ The header shows the active LLM provider (Groq / Gemini / Cerebras / Ollama) and
 <div align="center">
 
 **[ SYNAPSE ]** — *One sentence. Any infrastructure.*
+Code- 9SUEZM
 
 </div>
